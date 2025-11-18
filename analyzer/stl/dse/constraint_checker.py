@@ -8,6 +8,8 @@ STL constraint satisfaction and robustness.
 from typing import List, Dict, Callable, Optional, Any
 from ..monitors.offline_monitor import OfflineSTLMonitor
 from ..core.specification import STLSpecification
+from ..utils.logger import get_logger
+from ..utils.debug import get_debugger
 
 
 class ConstraintBasedDSE:
@@ -85,9 +87,26 @@ class ConstraintBasedDSE:
         """
         from analyzer.analyzer import Analyzer
 
+        logger = get_logger()
+        debugger = get_debugger()
+
+        logger.info(f"Starting design space exploration")
+        logger.info(f"  Configurations to evaluate: {len(hw_configs)}")
+        logger.info(f"  STL constraints: {len(self.constraints)}")
+
+        # Validate DSE configuration
+        from ..utils.diagnostics import validate_dse_configuration
+        validation = validate_dse_configuration(self, verbose=False)
+        if not validation['valid']:
+            logger.warning("  DSE configuration has issues:")
+            for issue in validation['issues']:
+                logger.warning(f"    - {issue}")
+
         results = []
 
         for i, config in enumerate(hw_configs):
+            logger.info(f"\n[{i+1}/{len(hw_configs)}] Evaluating configuration: {config.name}")
+
             if verbose:
                 print(f"Evaluating configuration {i+1}/{len(hw_configs)}: {config.name}")
 
@@ -98,10 +117,12 @@ class ConstraintBasedDSE:
                 else:
                     analyzer = Analyzer(self.model, config, data_bitwidth=self.data_bitwidth)
 
+                logger.debug(f"  Running simulation...")
                 # Run simulation
                 analyzer.run_simulation_analysis(verbose=False)
                 stats = config.get_statistics()
 
+                logger.debug(f"  Simulation complete. Evaluating STL constraints...")
                 # Evaluate STL constraints
                 monitor = OfflineSTLMonitor(self.constraints, config)
                 stl_results = monitor.evaluate(stats)
@@ -128,13 +149,24 @@ class ConstraintBasedDSE:
                 # Cache result
                 self.results_cache[config.name] = result
 
+                logger.info(f"  Result: min_ρ={min_robustness:.6f}, satisfies_all={result['satisfies_all']}")
+
                 if verbose:
                     print(f"  Min robustness: {min_robustness:.6f}")
                     print(f"  Satisfies all: {result['satisfies_all']}")
 
             except Exception as e:
+                error_msg = f"Configuration '{config.name}' evaluation failed: {e}"
+                logger.error(error_msg)
+                debugger.add_error(error_msg, context={
+                    'config_name': config.name,
+                    'config_index': i,
+                    'error_type': type(e).__name__
+                })
+
                 if verbose:
                     print(f"  ERROR: {e}")
+
                 results.append({
                     'config': config,
                     'config_name': config.name,
@@ -145,6 +177,13 @@ class ConstraintBasedDSE:
 
         # Sort by robustness (higher is better)
         results.sort(key=lambda x: x['min_robustness'], reverse=True)
+
+        # Summary
+        satisfying_count = sum(1 for r in results if r.get('satisfies_all', False))
+        logger.info(f"\n=== DSE Summary ===")
+        logger.info(f"  Total configurations: {len(results)}")
+        logger.info(f"  Satisfying all constraints: {satisfying_count}")
+        logger.info(f"  Best min robustness: {results[0]['min_robustness']:.6f} ({results[0]['config_name']})")
 
         return results
 
