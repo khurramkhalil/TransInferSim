@@ -27,10 +27,30 @@ from analyzer.stl import (
     PerformanceConstraints,
     PowerConstraints,
     ResourceConstraints,
-    STL_AVAILABLE
+    STL_AVAILABLE,
+    # Debugging utilities
+    enable_debug_logging,
+    enable_trace_logging,
+    LogLevel,
+    set_log_level
 )
 from analyzer.stl.dse import ParetoFrontier, RobustnessRanker
 from analyzer.stl.utils import generate_dse_report
+
+# =========================================================================
+# OPTIONAL: Enable Debug Mode for DSE
+# =========================================================================
+# Uncomment to see detailed DSE progress, signal extraction, and STL evaluation:
+#
+# enable_debug_logging()  # Recommended for DSE to track progress
+# enable_trace_logging()  # Very verbose - shows all internal details
+#
+# This is particularly useful for DSE to understand:
+# - Which configurations are being evaluated
+# - Why some configs fail constraints
+# - Signal extraction for each configuration
+# - Robustness computation details
+# =========================================================================
 
 
 def create_accelerator_config(

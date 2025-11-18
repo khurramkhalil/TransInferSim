@@ -23,11 +23,34 @@ from analyzer.stl import (
     PowerConstraints,
     ResourceConstraints,
     CompositeConstraints,
-    STL_AVAILABLE
+    STL_AVAILABLE,
+    # Debugging utilities
+    enable_debug_logging,
+    enable_trace_logging,
+    LogLevel,
+    set_log_level
 )
 from analyzer.stl.utils import generate_stl_report
+import sys
 
 def main():
+    # =========================================================================
+    # OPTIONAL: Enable Debug Mode
+    # =========================================================================
+    # Uncomment the following lines to enable debugging output:
+    #
+    # enable_debug_logging()  # Shows DEBUG, INFO, WARNING, and ERROR messages
+    # enable_trace_logging()  # Shows all messages including TRACE (most verbose)
+    #
+    # Or set a specific log level:
+    # set_log_level(LogLevel.INFO)  # Only INFO, WARNING, and ERROR
+    #
+    # Debugging helps you understand:
+    # - Which signals are being extracted
+    # - Why constraints might be failing
+    # - What robustness values mean
+    # - Internal STL evaluation details
+    # =========================================================================
     print("=" * 80)
     print("TransInferSim with STL Constraints Example")
     print("=" * 80)
@@ -231,6 +254,29 @@ def main():
     # Evaluate constraints
     print("   Evaluating constraints against simulation results...")
     results = monitor.evaluate(stats)
+
+    # =========================================================================
+    # 5.1 OPTIONAL: Diagnostic utilities (for troubleshooting)
+    # =========================================================================
+    # If you encounter issues, use the diagnostic utilities:
+    #
+    # from analyzer.stl.utils.diagnostics import (
+    #     diagnose_monitor_failure,
+    #     check_signal_availability,
+    #     print_signal_statistics
+    # )
+    #
+    # # Check signal availability
+    # check_signal_availability(stats, ['latency', 'energy', 'area'], verbose=True)
+    #
+    # # Diagnose monitoring failures
+    # diagnosis = diagnose_monitor_failure(monitor, stats, verbose=True)
+    #
+    # # Print signal statistics
+    # from analyzer.stl.signals.signal_extractor import SignalExtractor
+    # extractor = SignalExtractor(accelerator)
+    # signals = extractor.extract_signals(stats)
+    # print_signal_statistics(signals, max_signals=10)
 
     # =========================================================================
     # 6. ANALYZE RESULTS

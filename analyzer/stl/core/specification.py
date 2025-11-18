@@ -4,6 +4,8 @@ STL Specification class for defining and evaluating Signal Temporal Logic formul
 
 from typing import Dict, List, Tuple, Union, Optional
 import warnings
+from ..utils.logger import get_logger
+from ..utils.debug import get_debugger
 
 
 class STLSpecification:
@@ -74,6 +76,13 @@ class STLSpecification:
         Returns:
             bool: True if parsing succeeded, False otherwise
         """
+        logger = get_logger()
+        debugger = get_debugger()
+
+        logger.debug(f"Parsing STL specification: {self.name}")
+        logger.trace(f"  Formula: {self.formula}")
+        logger.trace(f"  Signals: {self.signal_names}")
+
         try:
             import rtamt
 
@@ -83,6 +92,7 @@ class STLSpecification:
             # Declare all signal variables
             for signal_name in self.signal_names:
                 spec.declare_var(signal_name, 'float')
+                logger.trace(f"  Declared variable: {signal_name}")
 
             # Set the specification formula
             spec.spec = self.formula
@@ -90,18 +100,27 @@ class STLSpecification:
             # Parse the specification
             spec.parse()
 
+            logger.debug(f"  Successfully parsed: {self.name}")
+
             self._spec = spec
             self._parsed = True
             return True
 
-        except ImportError:
-            warnings.warn(
-                "rtamt not installed. STL parsing unavailable. "
-                "Install with: pip install rtamt"
-            )
+        except ImportError as e:
+            error_msg = "rtamt not installed. STL parsing unavailable. Install with: pip install rtamt"
+            logger.error(error_msg)
+            debugger.add_error(error_msg, context={'specification': self.name})
+            warnings.warn(error_msg)
             return False
         except Exception as e:
-            warnings.warn(f"Failed to parse STL formula '{self.formula}': {e}")
+            error_msg = f"Failed to parse STL formula '{self.formula}': {e}"
+            logger.error(error_msg)
+            debugger.add_error(error_msg, context={
+                'specification': self.name,
+                'formula': self.formula,
+                'signals': self.signal_names
+            })
+            warnings.warn(error_msg)
             return False
 
     def evaluate(
@@ -124,22 +143,45 @@ class STLSpecification:
         Raises:
             ValueError: If required signals are missing or rtamt not available
         """
-        # Check that all required signals are provided
-        for signal_name in self.signal_names:
-            if signal_name not in signals:
-                raise ValueError(
-                    f"Required signal '{signal_name}' not provided. "
-                    f"Available signals: {list(signals.keys())}"
-                )
+        logger = get_logger()
+        debugger = get_debugger()
+
+        logger.debug(f"Evaluating STL specification: {self.name}")
+
+        # Validate specification first
+        spec_validation = debugger.validate_specification(self)
+        if not spec_validation['valid']:
+            error_msg = f"Invalid specification '{self.name}': {spec_validation['issues']}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Validate signals
+        signal_validation = debugger.validate_signals(signals, self.signal_names)
+        if not signal_validation['valid']:
+            error_msg = f"Signal validation failed for '{self.name}'"
+            logger.error(error_msg)
+            logger.error(f"  Issues: {signal_validation['issues']}")
+
+            # Try diagnosis
+            diagnosis = debugger.diagnose_evaluation_failure(
+                self, signals,
+                ValueError(f"Missing signals: {signal_validation['missing_signals']}")
+            )
+
+            raise ValueError(
+                f"Required signal not provided for specification '{self.name}'. "
+                f"Missing: {signal_validation['missing_signals']}. "
+                f"Available signals: {list(signals.keys())}"
+            )
 
         # Parse if not already done
         if not self._parsed:
+            logger.debug(f"  Specification not parsed, parsing now...")
             success = self.parse()
             if not success:
-                raise RuntimeError(
-                    "Cannot evaluate STL specification: parsing failed. "
-                    "Ensure rtamt is installed."
-                )
+                error_msg = "Cannot evaluate STL specification: parsing failed. Ensure rtamt is installed."
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
 
         # Evaluate using rtamt
         try:
@@ -148,13 +190,23 @@ class STLSpecification:
             for signal_name in self.signal_names:
                 eval_args.append(signal_name)
                 eval_args.append(signals[signal_name])
+                logger.trace(f"  Signal {signal_name}: {len(signals[signal_name])} points")
 
             robustness = self._spec.evaluate(*eval_args)
+
+            logger.debug(f"  Evaluation result: robustness = {robustness:.6f}")
+            logger.debug(f"  Satisfied: {robustness >= 0}")
 
             return robustness
 
         except Exception as e:
-            raise RuntimeError(f"STL evaluation failed: {e}")
+            error_msg = f"STL evaluation failed for '{self.name}': {e}"
+            logger.error(error_msg)
+
+            # Diagnose the failure
+            diagnosis = debugger.diagnose_evaluation_failure(self, signals, e)
+
+            raise RuntimeError(error_msg)
 
     def evaluate_simple(
         self,

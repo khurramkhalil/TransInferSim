@@ -40,6 +40,10 @@ from .constraints.resource_constraints import ResourceConstraints
 # DSE utilities
 from .dse.constraint_checker import ConstraintBasedDSE
 
+# Debugging utilities
+from .utils.logger import get_logger, set_log_level, LogLevel, enable_debug_logging, enable_trace_logging
+from .utils.debug import get_debugger, enable_debugging, disable_debugging
+
 __all__ = [
     'STL_AVAILABLE',
     'STL_BACKEND',
@@ -50,6 +54,15 @@ __all__ = [
     'PowerConstraints',
     'ResourceConstraints',
     'ConstraintBasedDSE',
+    # Debugging
+    'get_logger',
+    'set_log_level',
+    'LogLevel',
+    'enable_debug_logging',
+    'enable_trace_logging',
+    'get_debugger',
+    'enable_debugging',
+    'disable_debugging',
 ]
 
 __version__ = '0.1.0'

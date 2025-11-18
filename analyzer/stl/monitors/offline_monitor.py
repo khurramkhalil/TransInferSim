@@ -9,6 +9,8 @@ from typing import Dict, List
 from .base_monitor import BaseSTLMonitor
 from ..core.specification import STLSpecification
 from ..signals.signal_extractor import SignalExtractor
+from ..utils.logger import get_logger
+from ..utils.debug import get_debugger
 
 
 class OfflineSTLMonitor(BaseSTLMonitor):
@@ -74,12 +76,27 @@ class OfflineSTLMonitor(BaseSTLMonitor):
         Raises:
             ValueError: If required signals are not available
         """
+        logger = get_logger()
+        debugger = get_debugger()
+
+        logger.info(f"Starting offline STL monitoring ({len(self.specifications)} specifications)")
+
         # Extract all signals from statistics
-        all_signals = self.extractor.extract_signals(stats_dict)
+        try:
+            all_signals = self.extractor.extract_signals(stats_dict)
+            logger.info(f"  Extracted {len(all_signals)} signals from statistics")
+            logger.debug(f"  Available signals: {', '.join(list(all_signals.keys())[:10])}...")
+        except Exception as e:
+            error_msg = f"Failed to extract signals from statistics: {e}"
+            logger.error(error_msg)
+            debugger.add_error(error_msg, context={'num_specs': len(self.specifications)})
+            raise RuntimeError(error_msg)
 
         # Evaluate each specification
         results = []
-        for spec in self.specifications:
+        for i, spec in enumerate(self.specifications):
+            logger.debug(f"\nEvaluating specification {i+1}/{len(self.specifications)}: {spec.name}")
+
             try:
                 # Get required signals for this specification
                 required_signals = {
@@ -102,19 +119,47 @@ class OfflineSTLMonitor(BaseSTLMonitor):
 
                 results.append(result)
 
+                if robustness >= 0:
+                    logger.info(f"  ✓ {spec.name}: SATISFIED (ρ = {robustness:.6f})")
+                else:
+                    logger.warning(f"  ✗ {spec.name}: VIOLATED (ρ = {robustness:.6f})")
+
             except KeyError as e:
-                raise ValueError(
-                    f"Required signal not available for specification '{spec.name}': {e}\n"
-                    f"Available signals: {list(all_signals.keys())}"
-                )
+                error_msg = f"Required signal not available for specification '{spec.name}': {e}"
+                logger.error(error_msg)
+                logger.error(f"  Available signals: {list(all_signals.keys())}")
+                debugger.add_error(error_msg, context={
+                    'specification': spec.name,
+                    'required_signals': spec.signal_names,
+                    'available_signals': list(all_signals.keys())
+                })
+                raise ValueError(error_msg)
             except Exception as e:
-                raise RuntimeError(
-                    f"Failed to evaluate specification '{spec.name}': {e}"
-                )
+                error_msg = f"Failed to evaluate specification '{spec.name}': {e}"
+                logger.error(error_msg)
+
+                # Run diagnostic
+                from ..utils.diagnostics import diagnose_monitor_failure
+                diagnosis = debugger.diagnose_evaluation_failure(spec, all_signals, e)
+
+                debugger.add_error(error_msg, context={
+                    'specification': spec.name,
+                    'error_type': type(e).__name__
+                })
+                raise RuntimeError(error_msg)
 
         # Store results and mark as evaluated
         self.results = results
         self._evaluated = True
+
+        # Summary
+        satisfied_count = sum(1 for r in results if r['satisfied'])
+        violated_count = len(results) - satisfied_count
+
+        logger.info(f"\n=== Monitoring Summary ===")
+        logger.info(f"  Total specifications: {len(results)}")
+        logger.info(f"  Satisfied: {satisfied_count}")
+        logger.info(f"  Violated: {violated_count}")
 
         return results
 

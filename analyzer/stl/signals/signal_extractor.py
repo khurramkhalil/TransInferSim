@@ -6,6 +6,7 @@ into time-series signals suitable for STL monitoring.
 """
 
 from typing import Dict, List, Tuple, Optional
+from ..utils.logger import get_logger
 
 
 class SignalExtractor:
@@ -43,14 +44,30 @@ class SignalExtractor:
         Returns:
             Dictionary mapping signal names to time-series data [(time, value), ...]
         """
+        logger = get_logger()
+
+        logger.debug("Extracting signals from statistics dictionary")
+
         signals = {}
 
         # Extract global metrics
-        signals.update(self._extract_global_signals(stats_dict))
+        logger.trace("  Extracting global signals...")
+        global_signals = self._extract_global_signals(stats_dict)
+        signals.update(global_signals)
+        logger.trace(f"    Extracted {len(global_signals)} global signals")
 
         # Extract per-component signals
-        signals.update(self._extract_compute_signals(stats_dict))
-        signals.update(self._extract_memory_signals(stats_dict))
+        logger.trace("  Extracting compute signals...")
+        compute_signals = self._extract_compute_signals(stats_dict)
+        signals.update(compute_signals)
+        logger.trace(f"    Extracted {len(compute_signals)} compute signals")
+
+        logger.trace("  Extracting memory signals...")
+        memory_signals = self._extract_memory_signals(stats_dict)
+        signals.update(memory_signals)
+        logger.trace(f"    Extracted {len(memory_signals)} memory signals")
+
+        logger.debug(f"  Total signals extracted: {len(signals)}")
 
         return signals
 
